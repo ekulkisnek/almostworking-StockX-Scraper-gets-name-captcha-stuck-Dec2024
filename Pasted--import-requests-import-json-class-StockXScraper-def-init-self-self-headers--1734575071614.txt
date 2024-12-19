@@ -1,0 +1,103 @@
+
+import requests
+import json
+
+class StockXScraper:
+    def __init__(self):
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json',
+            'X-Algolia-API-Key': '6b5e76b49705eb9f51a06d3c82f7acee',
+            'X-Algolia-Application-Id': 'XW7SBCT9V6'
+        }
+        
+    def search_product(self, query):
+        try:
+            params = {
+                "params": f"query={query}&hitsPerPage=1"
+            }
+            
+            response = requests.post(
+                'https://xw7sbct9v6-1.algolianet.com/1/indexes/products/query',
+                headers=self.headers,
+                json=params
+            )
+            
+            data = response.json()
+            if not data['hits']:
+                return None
+                
+            product = data['hits'][0]
+            return {
+                'name': product['name'],
+                'style_id': product['style_id'],
+                'url_key': product['url'],
+                'lowest_ask': product.get('lowest_ask'),
+                'retail_price': product.get('searchable_traits', {}).get('Retail Price'),
+                'release_date': product.get('release_date'),
+                'brand': product.get('brand'),
+                'colorway': product.get('colorway'),
+            }
+        except Exception as e:
+            print(f"Error searching product: {e}")
+            return None
+
+    def get_prices(self, url_key):
+        try:
+            response = requests.get(
+                f'https://stockx.com/api/products/{url_key}?includes=market',
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            )
+            
+            data = response.json()
+            variants = data['Product']['children']
+            
+            prices = {}
+            for key, variant in variants.items():
+                size = variant['shoeSize']
+                market = variant.get('market', {})
+                prices[size] = {
+                    'lowest_ask': market.get('lowestAsk', 'No asks'),
+                    'highest_bid': market.get('highestBid', 'No bids'),
+                    'last_sale': market.get('lastSale', 'No sales')
+                }
+            
+            return prices
+        except Exception as e:
+            print(f"Error getting prices: {e}")
+            return None
+
+def main():
+    scraper = StockXScraper()
+    
+    # Get user input
+    query = input("Enter shoe name: ")
+    
+    # Search for product
+    product = scraper.search_product(query)
+    if not product:
+        print("Product not found")
+        return
+        
+    print("\nProduct found:")
+    print(f"Name: {product['name']}")
+    print(f"Style ID: {product['style_id']}")
+    print(f"Retail Price: ${product['retail_price']}")
+    print(f"Brand: {product['brand']}")
+    print(f"Colorway: {product['colorway']}")
+    
+    # Get prices for all sizes
+    prices = scraper.get_prices(product['url_key'])
+    if not prices:
+        print("Could not get prices")
+        return
+        
+    print("\nPrices by size:")
+    for size, price_data in prices.items():
+        print(f"\nSize {size}:")
+        print(f"Lowest Ask: ${price_data['lowest_ask']}")
+        print(f"Highest Bid: ${price_data['highest_bid']}")
+        print(f"Last Sale: ${price_data['last_sale']}")
+
+if __name__ == "__main__":
+    main()
